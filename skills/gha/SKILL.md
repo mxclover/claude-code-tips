@@ -6,6 +6,12 @@ argument-hint: <url>
 
 Investigate this GitHub Actions URL: $ARGUMENTS
 
+## Pre-flight Check
+
+If `$ARGUMENTS` is empty or does not contain a GitHub Actions URL (e.g., `github.com/.../actions/runs/...`), do NOT proceed with the investigation. Instead, ask the user to provide a valid GitHub Actions run URL. Example format: `https://github.com/<owner>/<repo>/actions/runs/<run-id>`
+
+## Investigation
+
 Use the gh CLI to analyze this workflow run. Your investigation should:
 
 1. **Get basic info & identify actual failure**:

@@ -26,20 +26,49 @@ Extract the 15-20 most recent conversations (excluding the current one) to a tem
 SCRATCH=/tmp/claudemd-review-$(date +%s)
 mkdir -p "$SCRATCH"
 
-for f in $(ls -t "$CONVO_DIR"/*.jsonl | head -20); do
+# Get current session ID to exclude it
+CURRENT_SESSION=$(tail -1 ~/.claude/history.jsonl 2>/dev/null | jq -r '.sessionId // empty')
+
+for f in $(ls -t "$CONVO_DIR"/*.jsonl 2>/dev/null | head -25); do
   basename=$(basename "$f" .jsonl)
-  # Skip current conversation if known
-  cat "$f" | jq -r '
+
+  # Skip current conversation
+  [[ "$basename" == "$CURRENT_SESSION" ]] && continue
+
+  # Skip empty or tiny files (<100 bytes — likely incomplete)
+  [[ ! -s "$f" ]] && continue
+  [[ $(wc -c < "$f") -lt 100 ]] && continue
+
+  # Extract messages — handle both string and array content formats
+  jq -r '
     if .type == "user" then
-      "USER: " + (.message.content // "")
+      "USER: " + (
+        if (.message.content | type) == "string" then .message.content
+        elif (.message.content | type) == "array" then
+          [.message.content[] | select(.type == "text") | .text] | join("\n")
+        else ""
+        end
+      )
     elif .type == "assistant" then
-      "ASSISTANT: " + ((.message.content // []) | map(select(.type == "text") | .text) | join("\n"))
+      "ASSISTANT: " + (
+        if (.message.content | type) == "string" then .message.content
+        elif (.message.content | type) == "array" then
+          [.message.content[] | select(.type == "text") | .text] | join("\n")
+        else ""
+        end
+      )
     else
       empty
     end
-  ' 2>/dev/null | grep -v "^ASSISTANT: $" > "$SCRATCH/${basename}.txt"
+  ' "$f" 2>/dev/null | grep -v "^ASSISTANT: $" > "$SCRATCH/${basename}.txt"
+
+  # Remove output files that ended up empty
+  [[ ! -s "$SCRATCH/${basename}.txt" ]] && rm -f "$SCRATCH/${basename}.txt"
 done
 
+# Check we got enough conversations
+FILE_COUNT=$(ls "$SCRATCH"/*.txt 2>/dev/null | wc -l)
+echo "Extracted $FILE_COUNT conversations"
 ls -lhS "$SCRATCH"
 ```
 
